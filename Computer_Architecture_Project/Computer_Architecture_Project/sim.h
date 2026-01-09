@@ -10,12 +10,12 @@
 #define MAX_LINE_LENGTH (500) // FIXME - check it
 #define NUMBER_OF_CORE_REGS (16) // 16 regs for each core
 #define INST_MEMORY_DEPTH (1024) // 32 b* 1024 rows
-#define CACHE_DSRAM_DEPTH (256) // 32b * 256 rows
+#define CACHE_DSRAM_DEPTH (512) // 32b * 256 rows
 #define CACHE_NUM_OF_BLOCKS (64) // 256/4 rows = 64 blocks (4 rows = 16B each)
 #define CACHE_TSRAM_DEPTH (64) // 14b * 64 rows
-#define CACHE_BLOCK_SIZE (4) // 4 rows * 32b
+#define CACHE_BLOCK_SIZE (8) // 4 rows * 32b
 #define CACHE_TAG_WIDTH (12) // 0-11 bits in TSRAM row
-#define MAIN_MEMORY_DEPTH (1048576) // 2^20 words = 1MB
+#define MAIN_MEMORY_DEPTH (2097152) // 2^20 words = 1MB
 #define MAIN_MEMORY_DELAY (16) // 16 clock cycles for main mem delay
 #define PIPE_REGS_WIDTH (6) // width of pipe-register
 #define NUM_CORES (4) //4 cores
@@ -26,7 +26,7 @@
 typedef struct bus {
     unsigned int origid : 3;
     unsigned int cmd : 2;
-    unsigned int addr : 20;
+    unsigned int addr : 21;
     unsigned int data : 32;
     unsigned int shared : 1;
 } bus;

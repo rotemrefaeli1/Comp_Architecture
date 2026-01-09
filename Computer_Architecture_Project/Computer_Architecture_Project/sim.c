@@ -385,7 +385,7 @@ void write_output_file_bustrace(simulator* sim, char* bus_trace_fp)
 {
     FILE* bus_trace_fh = open_file_to_append(bus_trace_fp);
 
-    fprintf(bus_trace_fh, "%d %01X %01X %05X %08X %01X\n", // fix me - format for cycle
+    fprintf(bus_trace_fh, "%d %01X %01X %06X %08X %01X\n", // fix me - format for cycle
         //cycle, // need to be cycle. get from simulator? each core?
         sim->clk,
         sim->bus_q->origid,
@@ -998,7 +998,7 @@ void pipe_memory_hit_or_bus_request(core* core, simulator* sim){
     int opcode = core->pipe_regs->EM_regs[OPCODE]->q;
     int address = core->pipe_regs->EM_regs[ALU_OUT]->q;
     int imm = core->pipe_regs->EM_regs[IMM]->q;
-    int block_index = (address >> 2) & 0x3F; //cache block index
+    int block_index = (address >> 3) & 0x3F; //cache block index
     int dest_reg = core->pipe_regs->EM_regs[RD]->q;
     int data = (dest_reg == 1) ? imm:core->regs[dest_reg];
     core->is_hit = 0; // Flag to indicate if the data is in the cache
@@ -1086,7 +1086,7 @@ void pipe_memory_hit_or_bus_request(core* core, simulator* sim){
             {
                 int pattern = 0x0FFF & (core->tsram[block_index]->tag);
                 pattern = pattern << 8;
-                core->flush_addr = pattern | ((0X0FF & block_index) << 2);
+                core->flush_addr = pattern | ((0X0FF & block_index) << 3);
                 //printf("DEBUG: flushing tag is %d \n",core->tsram[block_index]->tag);
                 //printf("DEBUG:self flushing, upcoming data is: %d,flusing data is: %d, flushing address is: %d,upcoming address is: %d\n",data,core->dsram[block_index],core->flush_addr,address);
                 core->self_flushing = true;
@@ -1113,7 +1113,7 @@ void pipe_memory_hit_or_bus_request(core* core, simulator* sim){
     } 
 
 void invalidate_other_blocks(core* cores[],core* core,int address){
-    int block_index = (address >> 2) & 0x3F; // find the index from the address 
+    int block_index = (address >> 3) & 0x3F; // find the index from the address 
 
     for(int i = 0; i < NUM_CORES; i++){
         if (core->id != i && is_hit(cores[i], address)){ // invalidate other blocks
@@ -1124,7 +1124,7 @@ void invalidate_other_blocks(core* cores[],core* core,int address){
 }
 
 void shared_other_blocks(core* cores[],core* core,int address){
-    int block_index = (address >> 2) & 0x3F; // find the index from the address 
+    int block_index = (address >> 3) & 0x3F; // find the index from the address 
 
     for(int i = 0; i < NUM_CORES; i++){
         if ((core->id != i) && (is_hit(cores[i], address)) && (cores[i]->tsram[block_index]->mesi == EXCLUSIVE)){ // invalidate other blocks
@@ -1142,16 +1142,16 @@ void pipe_memory_bus_snooping(core* cores[],core* core,bus* bus,simulator* sim){
     int requested_address = core->bus_addr;  // Doesnt change since core request
     int dest_reg = core->pipe_regs->EM_regs[RD]->q;
     int write_data = core->regs[dest_reg];
-    int requested_block_index = (requested_address >> 2) & 0x3F;
-    int requested_tag = requested_address >> 8;     
-    int requested_block_offset = requested_address & 0x3; 
+    int requested_block_index = (requested_address >> 3) & 0x3F;
+    int requested_tag = requested_address >> 9;     
+    int requested_block_offset = requested_address & 0x7; 
     int requested_data = 0;     // Will be updated later
     //BUS INFORMATION
     int upcoming_command = bus->cmd; 
     int upcoming_address = bus->addr; // Doesnt change since core request
-    int upcoming_block_index = (upcoming_address >> 2) & 0x3F; 
-    int upcoming_tag = upcoming_address >> 8;
-    int upcoming_block_offset = upcoming_address & 0x3;
+    int upcoming_block_index = (upcoming_address >> 3) & 0x3F; 
+    int upcoming_tag = upcoming_address >> 9;
+    int upcoming_block_offset = upcoming_address & 0x7;
     int upcoming_data = bus->data;
 
     // if the core is the sender of the transaction, do nothing FIXME - optimize
@@ -1282,8 +1282,8 @@ void initialize_tsram(core* core)
 // tag = 12 bits [19:8]
 
 bool is_hit(core* core,int address){
-    int block_index = (address >> 2) & 0x3F; // find the index from the address 
-    int tag = address >> 8;       // Extract tag bits from the address
+    int block_index = (address >> 3) & 0x3F; // find the index from the address 
+    int tag = address >> 9;       // Extract tag bits from the address
     // Check if the tag matches and the MESI state is valid
     bool invalid_block = (core->tsram[block_index]->mesi == INVALID);
     // HIT- Exclusive/Shared/Modified state
@@ -1296,9 +1296,9 @@ bool is_hit(core* core,int address){
 
 void get_data_from_cache(core*core, int address, simulator* sim,int* return_data) //read from cache
 {
-    int block_offset = address & 0x3; // masking 2 bits [1:0]
-    int block_index = (address >> 2) & 0x3F; // find the index from the address 
-    int tag = address >> 8;       // Extract tag bits from the address
+    int block_offset = address & 0x7; // masking 2 bits [1:0]
+    int block_index = (address >> 3) & 0x3F; // find the index from the address 
+    int tag = address >> 9;       // Extract tag bits from the address
 
     int line_dsram = 4*block_index + block_offset; // the line of the word in the dsram
     *return_data = core->dsram[line_dsram]; // Return the word that was just loaded
@@ -1307,10 +1307,10 @@ void get_data_from_cache(core*core, int address, simulator* sim,int* return_data
 
 void write_data_to_cache(core* core,int address, int data, simulator* sim)
 {
-    int block_offset = address & 0x3; // masking 2 bits [1:0]
-    int block_index = (address >> 2) & 0x3F; // find the index from the address 
-    int tag = address >> 8;       // Extract tag bits from the address
-    int line_dsram = 4*block_index + block_offset; // the line of the word in the dsram
+    int block_offset = address & 0x7; // masking 2 bits [1:0]
+    int block_index = (address >> 3) & 0x3F; // find the index from the address 
+    int tag = address >> 9;       // Extract tag bits from the address
+    int line_dsram = 8*block_index + block_offset; // the line of the word in the dsram
     //printf("DEBUG: Writing data to cache: %d, index is:%d\n", data, block_index);
     core->dsram[line_dsram] = data;          // Write data to DSRAM
 }
@@ -1342,7 +1342,7 @@ void send_transaction(simulator* sim,core* cores[],core* requesting_core){
     int command = FLUSH;
     int address = sim->bus_q->addr;
     int address_without_lsb = address & 0xFFFFFFFC; //mask the last 2 bits
-    int block_index = (address >> 2) & 0x3F; // Block index calculation
+    int block_index = (address >> 3) & 0x3F; // Block index calculation
     int trans_num = 3 - sim->transaction_timer;
 
     //Update bus due to sender
@@ -1442,7 +1442,7 @@ void update_bus(bus* bus_d, core* core) {
     {
         bus_d->addr = core->flush_addr;
         bus_d->cmd = FLUSH;
-        bus_d->data = core->dsram[(core->flush_addr>>2) & 0x3F];
+        bus_d->data = core->dsram[(core->flush_addr>>3) & 0x3F];
         bus_d->origid = core->id;
         return;
     }
@@ -1453,8 +1453,8 @@ void update_bus(bus* bus_d, core* core) {
 void execute_transaction(core* requesting_core, core* cores[],simulator* sim) {
     //Assume that bus is updated
     int address = sim->bus_q->addr;  
-    int block_index = (address >> 2) & 0x3F; // Block index calculation
-    int tag = address >> 8; // Extract tag bits from the address
+    int block_index = (address >> 3) & 0x3F; // Block index calculation
+    int tag = address >> 9; // Extract tag bits from the address
     int requested_command = requesting_core->bus_cmd;
     bool shared_state_flag = false; // update requesting core according to it
     int sender_bit = 0; // 0 - main mem, 1 - modified dirty core 
