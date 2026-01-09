@@ -1086,7 +1086,7 @@ void pipe_memory_hit_or_bus_request(core* core, simulator* sim){
             {
                 int pattern = 0x0FFF & (core->tsram[block_index]->tag);
                 pattern = pattern << 8;
-                core->flush_addr = pattern | ((0X0FF & block_index) << 3);
+                core->flush_addr = (core->tsram[block_index]->tag << 9) | (block_index << 3);
                 //printf("DEBUG: flushing tag is %d \n",core->tsram[block_index]->tag);
                 //printf("DEBUG:self flushing, upcoming data is: %d,flusing data is: %d, flushing address is: %d,upcoming address is: %d\n",data,core->dsram[block_index],core->flush_addr,address);
                 core->self_flushing = true;
@@ -1300,7 +1300,7 @@ void get_data_from_cache(core*core, int address, simulator* sim,int* return_data
     int block_index = (address >> 3) & 0x3F; // find the index from the address 
     int tag = address >> 9;       // Extract tag bits from the address
 
-    int line_dsram = 4*block_index + block_offset; // the line of the word in the dsram
+    int line_dsram = 8*block_index + block_offset; // the line of the word in the dsram
     *return_data = core->dsram[line_dsram]; // Return the word that was just loaded
 }
 
@@ -1369,6 +1369,7 @@ void send_transaction(simulator* sim,core* cores[],core* requesting_core){
 
     if (requesting_core->self_flushing) // self-flushing -> update the main memory
     {
+        sim->bus_d->shared = 0; //FIXME check if correct
         sim->bus_d->data = cores[sender]->dsram[8*block_index + trans_num];
         sim->main_memory[address_without_lsb + trans_num] = sim->bus_d->data;
         if(address_without_lsb + trans_num > sim->max_main_memory_index){
