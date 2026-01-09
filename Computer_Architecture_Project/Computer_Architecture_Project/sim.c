@@ -526,7 +526,7 @@ void run_simulator(simulator* simulator, core* core0,core* core1, core* core2,co
         }
 
         //SEND TRANSACTION to the bus
-        if ((simulator->bus_is_busy) && (simulator->transaction_timer <= 3)) //sending condition
+        if ((simulator->bus_is_busy) && (simulator->transaction_timer <= 7)) //sending condition
         {   
             send_transaction(simulator,cores,priority_core); // send transaction to bus
 
@@ -1164,10 +1164,10 @@ void pipe_memory_bus_snooping(core* cores[],core* core,bus* bus,simulator* sim){
     if (requested_block_index == upcoming_block_index)
     {    
         //printf("RECEIVING TRANSACTION: Sender id is:%d, the address is:%d, the data is:%d, trans number is:%d\n",bus->origid,upcoming_address,upcoming_data,core->transaction_number);
-        core->dsram[4*upcoming_block_index + core->transaction_number] = upcoming_data; // update data in cache line
+        core->dsram[8*upcoming_block_index + core->transaction_number] = upcoming_data; // update data in cache line
 
         //LAST CYCLE FOR CURRENT TRANSACTION
-        if (core->transaction_number == 3)
+        if (core->transaction_number == 7)
         {
             //forward data to WB pipe-stage if it is the last transaction in current block
             core->pipe_regs->MWB_regs[OPCODE]->d = requested_opcode; // bypass opcode
@@ -1176,13 +1176,13 @@ void pipe_memory_bus_snooping(core* cores[],core* core,bus* bus,simulator* sim){
             // SW case - write data to cache
             if (requested_opcode == SW)
             {
-                core->dsram[4*requested_block_index + requested_block_offset] = write_data; // update data in cache
+                core->dsram[8*requested_block_index + requested_block_offset] = write_data; // update data in cache
             }// end if (requested_opcode == SW)
 
             //SW case - just push the requested data to the next pipe-stage
             if (requested_opcode == LW)
             {   
-                requested_data = core->dsram[4*requested_block_index + requested_block_offset]; // get data from cache
+                requested_data = core->dsram[8*requested_block_index + requested_block_offset]; // get data from cache
                 core->pipe_regs->MWB_regs[MD]->d = requested_data; // update data in pipeline
             } //end if (requested_opcode == LW)
 
@@ -1341,9 +1341,9 @@ void send_transaction(simulator* sim,core* cores[],core* requesting_core){
     int sender = sim->sender_id;
     int command = FLUSH;
     int address = sim->bus_q->addr;
-    int address_without_lsb = address & 0xFFFFFFFC; //mask the last 2 bits
+    int address_without_lsb = address & 0xFFFFFFF8; //mask the last 3 bits
     int block_index = (address >> 3) & 0x3F; // Block index calculation
-    int trans_num = 3 - sim->transaction_timer;
+    int trans_num = 7 - sim->transaction_timer;
 
     //Update bus due to sender
     sim->bus_d->cmd = command;
@@ -1359,7 +1359,7 @@ void send_transaction(simulator* sim,core* cores[],core* requesting_core){
 
     if (sim->dirty_block) //other core is flushing -> update the main memory by the way
     {
-        sim->bus_d->data = cores[sender]->dsram[4*block_index + trans_num];
+        sim->bus_d->data = cores[sender]->dsram[8*block_index + trans_num];
         sim->main_memory[address_without_lsb + trans_num] = sim->bus_d->data;
         if(address_without_lsb + trans_num > sim->max_main_memory_index){
             sim->max_main_memory_index = address_without_lsb + trans_num;
@@ -1369,7 +1369,7 @@ void send_transaction(simulator* sim,core* cores[],core* requesting_core){
 
     if (requesting_core->self_flushing) // self-flushing -> update the main memory
     {
-        sim->bus_d->data = cores[sender]->dsram[4*block_index + trans_num];
+        sim->bus_d->data = cores[sender]->dsram[8*block_index + trans_num];
         sim->main_memory[address_without_lsb + trans_num] = sim->bus_d->data;
         if(address_without_lsb + trans_num > sim->max_main_memory_index){
             sim->max_main_memory_index = address_without_lsb + trans_num;
@@ -1462,7 +1462,7 @@ void execute_transaction(core* requesting_core, core* cores[],simulator* sim) {
     // Self-flushing case
     if (requesting_core->self_flushing){
         sim->sender_id = requesting_core->id; // Set the sender ID
-        sim->transaction_timer = 3; // Set the transaction timer for non-memory case
+        sim->transaction_timer = 7; // Set the transaction timer for non-memory case
         requesting_core->tsram[block_index]->mesi = INVALID;
         return;
     }
@@ -1499,7 +1499,7 @@ void execute_transaction(core* requesting_core, core* cores[],simulator* sim) {
             requesting_core->tsram[block_index]->mesi = SHARED; // Set the updated state for receiving core
             requesting_core->tsram[block_index]->tag = tag; // Set the updated tag for receiving core
             sim->sender_id = i; // Set the sender ID
-            sim->transaction_timer = 3; // Set the transaction timer for non-memory case
+            sim->transaction_timer = 7; // Set the transaction timer for non-memory case
             sim->dirty_block = 1;
             return;
         }
@@ -1509,7 +1509,7 @@ void execute_transaction(core* requesting_core, core* cores[],simulator* sim) {
     requesting_core->tsram[block_index]->mesi = (shared_state_flag) ? SHARED:EXCLUSIVE; // Set the updated state for receiving core
     requesting_core->tsram[block_index]->tag = tag; // Set the updated tag for receiving core
     sim->sender_id = 4; // Set the sender ID to main memory
-    sim->transaction_timer = 18; // Set the transaction timer
+    sim->transaction_timer = 22; // Set the transaction timer
     }// end of BUSRD
 
 
@@ -1544,7 +1544,7 @@ void execute_transaction(core* requesting_core, core* cores[],simulator* sim) {
             requesting_core->tsram[block_index]->mesi = MODIFIED; // Set the updated state for receiving core
             requesting_core->tsram[block_index]->tag = tag; // Set the updated tag for receiving core
             sim->sender_id = i; // Set the sender ID
-            sim->transaction_timer = 3; // Set the transaction timer for non-memory case
+            sim->transaction_timer = 7; // Set the transaction timer for non-memory case
             sim->dirty_block = 1;
             return;
         }
@@ -1554,7 +1554,7 @@ void execute_transaction(core* requesting_core, core* cores[],simulator* sim) {
     requesting_core->tsram[block_index]->mesi = MODIFIED; // Set the updated state for receiving core
     requesting_core->tsram[block_index]->tag = tag; // Set the updated tag for receiving core
     sim->sender_id = 4; // Set the sender ID to main memory
-    sim->transaction_timer = 18; // Set the transaction timer
+    sim->transaction_timer = 22; // Set the transaction timer
     return;
     } // end of if(BUSRDX)
     }
